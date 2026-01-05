@@ -1,0 +1,358 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="page-header">
+    <h2>Зоны склада</h2>
+    <button class="btn btn-primary" id="addZoneBtn">
+        <i class="fas fa-plus"></i> Добавить зону
+    </button>
+</div>
+
+<div class="zones-grid">
+    {% for zone in zones %}
+    <div class="zone-card" data-zone-id="{{ zone.id }}">
+        <div class="zone-header">
+            <h3>{{ zone.name }}</h3>
+            <div class="zone-actions">
+                <button class="btn-icon edit-zone-btn" data-zone-id="{{ zone.id }}" data-zone-name="{{ zone.name }}" data-zone-description="{{ zone.description }}">
+                    <i class="fas fa-edit"></i>
+                </button>
+                <button class="btn-icon btn-danger delete-zone-btn" data-zone-id="{{ zone.id }}">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+        </div>
+        {% if zone.description %}
+        <p class="zone-description">{{ zone.description }}</p>
+        {% endif %}
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Модальное окно добавления/редактирования зоны -->
+<div id="zoneModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3 id="zoneModalTitle">Добавить зону</h3>
+            <span class="close" id="closeZoneModal">&times;</span>
+        </div>
+        <div class="modal-body">
+            <form id="zoneForm">
+                <input type="hidden" id="zoneId">
+                <div class="form-group">
+                    <label for="zoneName">Название зоны:</label>
+                    <input type="text" id="zoneName" required>
+                </div>
+                <div class="form-group">
+                    <label for="zoneDescription">Описание:</label>
+                    <textarea id="zoneDescription" rows="3"></textarea>
+                </div>
+            </form>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" id="cancelZoneBtn">Отмена</button>
+            <button class="btn btn-primary" id="saveZoneBtn">Сохранить</button>
+        </div>
+    </div>
+</div>
+
+<div class="export-section">
+    <h3>Выгрузка данных</h3>
+    <div class="export-buttons">
+        <button class="btn btn-success" id="exportExcelAllBtn">
+            <i class="fas fa-file-excel"></i> Выгрузить все данные
+        </button>
+        <button class="btn btn-info" id="exportExcelBoxesBtn">
+            <i class="fas fa-boxes"></i> Выгрузить по коробкам
+        </button>
+        <button class="btn btn-warning" id="exportItemsByDateBtn">
+            <i class="fas fa-calendar"></i> Выгрузить за период
+        </button>
+        <button class="btn btn-primary" id="importItemsBtn">
+            <i class="fas fa-file-import"></i> Импорт товаров
+        </button>
+    </div>
+    <p class="export-description">
+        <strong>Все данные:</strong> полная таблица со всеми товарами и статистикой<br>
+        <strong>По коробкам:</strong> отдельные листы для каждой коробки с группировкой<br>
+        <strong>За период:</strong> товары за выбранный период времени<br>
+        <strong>Импорт товаров:</strong> загрузка товаров из Excel файла
+    </p>
+</div>
+
+<!-- Модальное окно выгрузки за период -->
+<div id="exportByDateModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Выгрузка товаров за период</h3>
+            <span class="close" id="closeExportByDateModal">&times;</span>
+        </div>
+        <div class="modal-body">
+            <form id="exportByDateForm">
+                <div class="form-group">
+                    <label for="exportStartDate">Начальная дата:</label>
+                    <input type="date" id="exportStartDate" required>
+                </div>
+                <div class="form-group">
+                    <label for="exportEndDate">Конечная дата:</label>
+                    <input type="date" id="exportEndDate" required>
+                </div>
+            </form>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" id="cancelExportByDateBtn">Отмена</button>
+            <button class="btn btn-primary" id="confirmExportByDateBtn">Выгрузить</button>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно импорта товаров -->
+<div id="importItemsModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Импорт товаров из Excel</h3>
+            <span class="close" id="closeImportItemsModal">&times;</span>
+        </div>
+        <div class="modal-body">
+            <div class="import-form">
+                <!-- Добавляем выбор режима импорта -->
+                <div class="form-group">
+                    <label for="importMode">Режим импорта:</label>
+                    <select id="importMode" class="form-control">
+                        <option value="add">Добавить к существующим товарам</option>
+                        <option value="replace">Удалить все и заменить новыми данными</option>
+                    </select>
+                    <small class="form-text text-muted">
+                        <strong>Добавить:</strong> новые товары будут добавлены, существующие - обновлены<br>
+                        <strong>Заменить:</strong> все текущие данные будут удалены и заменены новыми
+                    </small>
+                </div>
+                
+                <div class="form-group">
+                    <label>Файл Excel:</label>
+                    <input type="file" id="itemsExcelFile" accept=".xlsx" style="display: none;">
+                    <div class="file-input-group">
+                        <button type="button" class="btn btn-info" id="selectItemsFileBtn">
+                            <i class="fas fa-file-import"></i> Выбрать файл Excel
+                        </button>
+                        <span id="itemsFileName" style="margin-left: 1rem;"></span>
+                    </div>
+                </div>
+                
+                <div id="importItemsResult" style="margin-top: 1rem;"></div>
+            </div>
+            <div class="import-instructions" style="margin-top: 1.5rem; padding: 1rem; background: #f8f9fa; border-radius: 6px;">
+                <h4>Инструкция по импорту:</h4>
+                <p>Файл Excel должен содержать следующие колонки:</p>
+                <ul>
+                    <li><strong>Название товара</strong> (обязательно)</li>
+                    <li><strong>Количество</strong> (обязательно)</li>
+                    <li><strong>Штрих-код</strong> (опционально)</li>
+                    <li><strong>Зона</strong> (опционально, по умолчанию "Основная зона")</li>
+                    <li><strong>Коробка</strong> (опционально, по умолчанию "Коробка 1")</li>
+                </ul>
+                <div class="alert alert-warning">
+                    <strong>Внимание!</strong> В режиме "Заменить" все текущие товары, коробки и зоны будут удалены!
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" id="cancelImportItemsBtn">Отмена</button>
+            <button class="btn btn-primary" id="confirmImportItemsBtn" disabled>
+                <i class="fas fa-upload"></i> Импортировать
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Инициализация дат для экспорта
+    const today = new Date().toISOString().split('T')[0];
+    const oneMonthAgo = new Date();
+    oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+    const oneMonthAgoStr = oneMonthAgo.toISOString().split('T')[0];
+    
+    document.getElementById('exportStartDate').value = oneMonthAgoStr;
+    document.getElementById('exportEndDate').value = today;
+
+    // Обработчики для экспорта
+    document.getElementById('exportExcelAllBtn').addEventListener('click', function() {
+        window.location.href = '/api/export_excel_all';
+    });
+
+    document.getElementById('exportExcelBoxesBtn').addEventListener('click', function() {
+        window.location.href = '/api/export_excel_boxes';
+    });
+
+    document.getElementById('exportItemsByDateBtn').addEventListener('click', function() {
+        document.getElementById('exportByDateModal').style.display = 'block';
+    });
+
+    document.getElementById('confirmExportByDateBtn').addEventListener('click', function() {
+        const startDate = document.getElementById('exportStartDate').value;
+        const endDate = document.getElementById('exportEndDate').value;
+        
+        if (!startDate || !endDate) {
+            alert('Пожалуйста, выберите обе даты');
+            return;
+        }
+        
+        if (startDate > endDate) {
+            alert('Начальная дата не может быть больше конечной');
+            return;
+        }
+        
+        window.location.href = `/api/export_items_by_date?start_date=${startDate}&end_date=${endDate}`;
+        document.getElementById('exportByDateModal').style.display = 'none';
+    });
+
+    // Импорт товаров
+    document.getElementById('importItemsBtn').addEventListener('click', function() {
+        document.getElementById('importItemsModal').style.display = 'block';
+    });
+
+    document.getElementById('selectItemsFileBtn').addEventListener('click', function() {
+        document.getElementById('itemsExcelFile').click();
+    });
+
+    document.getElementById('itemsExcelFile').addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (file) {
+            document.getElementById('itemsFileName').textContent = file.name;
+            document.getElementById('confirmImportItemsBtn').disabled = false;
+            document.getElementById('importItemsResult').innerHTML = '';
+        }
+    });
+
+    document.getElementById('confirmImportItemsBtn').addEventListener('click', function() {
+        const fileInput = document.getElementById('itemsExcelFile');
+        const file = fileInput.files[0];
+        const importMode = document.getElementById('importMode').value;
+        
+        if (!file) {
+            alert('Пожалуйста, выберите файл');
+            return;
+        }
+        
+        // Подтверждение для режима замены
+        if (importMode === 'replace') {
+            if (!confirm('ВНИМАНИЕ! Все текущие товары, коробки и зоны будут удалены и заменены новыми данными. Вы уверены?')) {
+                return;
+            }
+        }
+        
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('import_mode', importMode);
+        
+        const resultDiv = document.getElementById('importItemsResult');
+        const importBtn = document.getElementById('confirmImportItemsBtn');
+        
+        resultDiv.innerHTML = '<div class="alert alert-info">Импорт товаров...</div>';
+        importBtn.disabled = true;
+        importBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Импорт...';
+        
+        fetch('/api/import_items_excel', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                let message = `<div class="alert alert-success">${data.message}</div>`;
+                if (data.errors && data.errors.length > 0) {
+                    message += `<div class="alert alert-warning">
+                        <strong>Ошибки при импорте (первые ${data.errors.length}):</strong>
+                        <ul>${data.errors.slice(0, 10).map(error => `<li>${error}</li>`).join('')}</ul>
+                    </div>`;
+                }
+                resultDiv.innerHTML = message;
+                
+                // Очищаем форму
+                fileInput.value = '';
+                document.getElementById('itemsFileName').textContent = '';
+                importBtn.disabled = true;
+                importBtn.innerHTML = '<i class="fas fa-upload"></i> Импортировать';
+                
+                // Обновляем страницу через 2 секунды
+                setTimeout(() => {
+                    location.reload();
+                }, 2000);
+            } else {
+                resultDiv.innerHTML = `<div class="alert alert-danger">Ошибка: ${data.error}</div>`;
+                importBtn.disabled = false;
+                importBtn.innerHTML = '<i class="fas fa-upload"></i> Импортировать';
+            }
+        })
+        .catch(error => {
+            resultDiv.innerHTML = `<div class="alert alert-danger">Ошибка: ${error.message}</div>`;
+            importBtn.disabled = false;
+            importBtn.innerHTML = '<i class="fas fa-upload"></i> Импортировать';
+        });
+    });
+
+    // Закрытие модальных окон
+    document.getElementById('closeExportByDateModal').addEventListener('click', function() {
+        document.getElementById('exportByDateModal').style.display = 'none';
+    });
+
+    document.getElementById('cancelExportByDateBtn').addEventListener('click', function() {
+        document.getElementById('exportByDateModal').style.display = 'none';
+    });
+
+    document.getElementById('closeImportItemsModal').addEventListener('click', function() {
+        document.getElementById('importItemsModal').style.display = 'none';
+    });
+
+    document.getElementById('cancelImportItemsBtn').addEventListener('click', function() {
+        document.getElementById('importItemsModal').style.display = 'none';
+    });
+});
+</script>
+
+<style>
+.alert {
+    padding: 0.75rem 1rem;
+    border-radius: 4px;
+    margin-bottom: 1rem;
+}
+
+.alert-warning {
+    background: #fff3cd;
+    color: #856404;
+    border: 1px solid #ffeaa7;
+}
+
+.alert-info {
+    background: #d1ecf1;
+    color: #0c5460;
+    border: 1px solid #bee5eb;
+}
+
+.alert-success {
+    background: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+}
+
+.alert-danger {
+    background: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+}
+
+.form-text {
+    font-size: 0.875rem;
+    color: #6c757d;
+}
+
+.form-control {
+    width: 100%;
+    padding: 0.75rem;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    font-size: 1rem;
+}
+</style>
+{% endblock %}

@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Складской учет{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/quagga@0.12.1/dist/quagga.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="container">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <h1><i class="fas fa-warehouse"></i> Складской учет</h1>
+                <div class="header-user">
+                    {% if username %}
+                    <div class="user-info-compact">
+                        <span><i class="fas fa-user"></i> {{ username }}</span>
+                        <a href="{{ url_for('logout') }}" class="btn btn-secondary btn-sm">
+                            <i class="fas fa-sign-out-alt"></i> Выйти
+                        </a>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="main">
+        <div class="container">
+            {% block content %}{% endblock %}
+        </div>
+    </main>
+
+    <!-- Нижняя навигация -->
+    <nav class="bottom-nav">
+        <div class="bottom-nav-container">
+            <a href="{{ url_for('index') }}" class="btn">
+                <i class="fas fa-home"></i> 
+                <span class="btn-text">Зоны</span>
+            </a>
+            <a href="{{ url_for('receipts_page') }}" class="btn">
+                <i class="fas fa-clipboard-list"></i>
+                <span class="btn-text">Приёмки</span>
+            </a>
+            <a href="{{ url_for('collection_page') }}" class="btn">
+                <i class="fas fa-shopping-cart"></i>
+                <span class="btn-text">Сборка</span>
+            </a>
+        </div>
+    </nav>
+
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+</body>
+</html>

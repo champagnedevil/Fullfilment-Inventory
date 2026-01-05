@@ -1,0 +1,579 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="page-header">
+    <h2>🛒 Сборка товаров</h2>
+    <p class="page-description">Загрузите файл со списком товаров для сборки</p>
+</div>
+
+<div class="collection-container">
+    <!-- Загрузка файла -->
+    <div class="upload-section">
+        <div class="upload-card">
+            <h3>📁 Загрузите файл для сборки</h3>
+            <p>Поддерживаются Excel файлы форматов:</p>
+            <ul>
+                <li>SHK-Excel (столбцы: Баркод, Количество, шт.)</li>
+                <li>Products Export (столбцы: штрихкод, количество)</li>
+                <li>Любой Excel с автоматическим определением столбцов</li>
+            </ul>
+            
+            <div class="file-upload-area" id="fileUploadArea">
+                <i class="fas fa-cloud-upload-alt fa-3x"></i>
+                <p>Перетащите файл сюда или нажмите для выбора</p>
+                <input type="file" id="collectionFile" accept=".xlsx" style="display: none;">
+                <button class="btn btn-primary" id="selectFileBtn">Выбрать файл</button>
+            </div>
+            
+            <div id="fileName" class="file-name" style="display: none;"></div>
+            
+            <button class="btn btn-success" id="processFileBtn" style="display: none; margin-top: 1rem;">
+                <i class="fas fa-cogs"></i> Обработать файл
+            </button>
+        </div>
+    </div>
+
+    <!-- Результаты обработки -->
+    <div id="resultsSection" style="display: none;">
+        <div class="results-header">
+            <h3>📋 План сборки</h3>
+            <div class="results-stats">
+                <div class="stat-badge">
+                    <span class="stat-label">Всего позиций:</span>
+                    <span class="stat-value" id="totalItems">0</span>
+                </div>
+                <div class="stat-badge">
+                    <span class="stat-label">Нужно собрать:</span>
+                    <span class="stat-value" id="totalNeeded">0</span>
+                </div>
+                <div class="stat-badge">
+                    <span class="stat-label">Можно взять:</span>
+                    <span class="stat-value" id="totalTake">0</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Оптимизированный план -->
+        <div class="optimized-plan">
+            <h4>🗺️ Оптимизированный маршрут сборки</h4>
+            <div id="optimizedPlan" class="plan-steps"></div>
+        </div>
+
+        <!-- Детальный список -->
+        <div class="detailed-plan">
+            <h4>📝 Детальный список товаров</h4>
+            <div id="detailedPlan" class="items-list"></div>
+        </div>
+
+        <!-- Кнопки действий -->
+        <div class="action-buttons">
+            <button class="btn btn-primary" id="confirmCollectionBtn">
+                <i class="fas fa-check-circle"></i> Подтвердить сборку
+            </button>
+            <button class="btn btn-secondary" id="printPlanBtn">
+                <i class="fas fa-print"></i> Печать плана
+            </button>
+            <button class="btn btn-info" id="exportPlanBtn">
+                <i class="fas fa-download"></i> Экспорт в Excel
+            </button>
+        </div>
+    </div>
+
+    <!-- Сообщения -->
+    <div id="messageArea" style="margin-top: 1rem;"></div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const fileInput = document.getElementById('collectionFile');
+    const selectFileBtn = document.getElementById('selectFileBtn');
+    const fileName = document.getElementById('fileName');
+    const processFileBtn = document.getElementById('processFileBtn');
+    const fileUploadArea = document.getElementById('fileUploadArea');
+    const resultsSection = document.getElementById('resultsSection');
+    const confirmCollectionBtn = document.getElementById('confirmCollectionBtn');
+    const printPlanBtn = document.getElementById('printPlanBtn');
+    const exportPlanBtn = document.getElementById('exportPlanBtn');
+    const messageArea = document.getElementById('messageArea');
+
+    let currentCollectionPlan = null;
+
+    // Обработчики событий для загрузки файла
+    selectFileBtn.addEventListener('click', () => fileInput.click());
+    
+    fileInput.addEventListener('change', function(e) {
+        if (this.files.length > 0) {
+            const file = this.files[0];
+            fileName.textContent = `📄 ${file.name}`;
+            fileName.style.display = 'block';
+            processFileBtn.style.display = 'block';
+            fileUploadArea.style.borderColor = '#28a745';
+        }
+    });
+
+    // Drag and drop
+    fileUploadArea.addEventListener('dragover', function(e) {
+        e.preventDefault();
+        this.style.borderColor = '#007bff';
+        this.style.backgroundColor = '#f8f9fa';
+    });
+
+    fileUploadArea.addEventListener('dragleave', function(e) {
+        e.preventDefault();
+        this.style.borderColor = '#dee2e6';
+        this.style.backgroundColor = '';
+    });
+
+    fileUploadArea.addEventListener('drop', function(e) {
+        e.preventDefault();
+        this.style.borderColor = '#dee2e6';
+        this.style.backgroundColor = '';
+        
+        if (e.dataTransfer.files.length > 0) {
+            fileInput.files = e.dataTransfer.files;
+            const file = e.dataTransfer.files[0];
+            fileName.textContent = `📄 ${file.name}`;
+            fileName.style.display = 'block';
+            processFileBtn.style.display = 'block';
+            fileUploadArea.style.borderColor = '#28a745';
+        }
+    });
+
+    // Обработка файла
+    processFileBtn.addEventListener('click', processCollectionFile);
+
+    // Подтверждение сборки
+    confirmCollectionBtn.addEventListener('click', confirmCollection);
+
+    // Печать плана
+    printPlanBtn.addEventListener('click', () => window.print());
+
+    // Экспорт плана
+    exportPlanBtn.addEventListener('click', exportCollectionPlan);
+
+    function processCollectionFile() {
+        if (!fileInput.files.length) {
+            showMessage('Пожалуйста, выберите файл', 'error');
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('file', fileInput.files[0]);
+
+        showMessage('Обработка файла...', 'info');
+        processFileBtn.disabled = true;
+        processFileBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Обработка...';
+
+        fetch('/api/process_collection', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                currentCollectionPlan = data;
+                displayCollectionPlan(data);
+                showMessage('Файл успешно обработан!', 'success');
+            } else {
+                showMessage('Ошибка: ' + data.error, 'error');
+            }
+        })
+        .catch(error => {
+            showMessage('Ошибка: ' + error.message, 'error');
+        })
+        .finally(() => {
+            processFileBtn.disabled = false;
+            processFileBtn.innerHTML = '<i class="fas fa-cogs"></i> Обработать файл';
+        });
+    }
+
+    function displayCollectionPlan(data) {
+        // Обновляем статистику
+        document.getElementById('totalItems').textContent = data.total_items;
+        document.getElementById('totalNeeded').textContent = data.total_needed;
+        document.getElementById('totalTake').textContent = data.total_to_take;
+
+        // Отображаем оптимизированный план
+        const optimizedPlan = document.getElementById('optimizedPlan');
+        optimizedPlan.innerHTML = '';
+
+        if (data.optimized_plan && data.optimized_plan.length > 0) {
+            data.optimized_plan.forEach((location, index) => {
+                const locationCard = document.createElement('div');
+                locationCard.className = 'location-card';
+                locationCard.innerHTML = `
+                    <div class="location-header">
+                        <h5>📍 ${location.zone} - 📦 ${location.box}</h5>
+                        <span class="badge">${location.items.length} товаров</span>
+                    </div>
+                    <div class="location-items">
+                        ${location.items.map(item => `
+                            <div class="location-item">
+                                <strong>${item.product_name}</strong>
+                                <div class="item-details">
+                                    <span>Штрих-код: ${item.barcode}</span>
+                                    <span>Взять: ${item.take} из ${item.needed} шт.</span>
+                                    <span class="remaining">Остаток: ${item.remaining_after} шт.</span>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+                optimizedPlan.appendChild(locationCard);
+            });
+        }
+
+        // Отображаем детальный план
+        const detailedPlan = document.getElementById('detailedPlan');
+        detailedPlan.innerHTML = '';
+
+        if (data.collection_plan && data.collection_plan.length > 0) {
+            data.collection_plan.forEach((item, index) => {
+                const itemCard = document.createElement('div');
+                itemCard.className = 'item-card';
+                itemCard.innerHTML = `
+                    <div class="item-info">
+                        <h5>${index + 1}. ${item.product_name}</h5>
+                        <p><strong>Штрих-код:</strong> ${item.barcode}</p>
+                        <p><strong>Артикул:</strong> ${item.article || 'Не указан'}</p>
+                        <p><strong>Количество:</strong> ${item.take} из ${item.needed} шт.</p>
+                        <p><strong>Местоположение:</strong> ${item.zone} - ${item.box}</p>
+                        <p><strong>Остаток после сборки:</strong> ${item.remaining_after} шт.</p>
+                    </div>
+                `;
+                detailedPlan.appendChild(itemCard);
+            });
+        }
+
+        // Показываем секцию результатов
+        resultsSection.style.display = 'block';
+
+        // Активируем кнопки
+        confirmCollectionBtn.disabled = false;
+        printPlanBtn.disabled = false;
+        exportPlanBtn.disabled = false;
+    }
+
+    function confirmCollection() {
+        if (!currentCollectionPlan || !currentCollectionPlan.collection_plan.length) {
+            showMessage('Нет данных для подтверждения', 'error');
+            return;
+        }
+
+        if (!confirm('Вы уверены, что хотите подтвердить сборку? Остатки товаров будут обновлены.')) {
+            return;
+        }
+
+        confirmCollectionBtn.disabled = true;
+        confirmCollectionBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Обновление...';
+
+        fetch('/api/confirm_collection', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                collection_plan: currentCollectionPlan.collection_plan
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showMessage(data.message, 'success');
+                confirmCollectionBtn.style.display = 'none';
+                
+                // Обновляем кнопки
+                printPlanBtn.style.marginRight = '0';
+            } else {
+                showMessage('Ошибка: ' + data.error, 'error');
+                confirmCollectionBtn.disabled = false;
+                confirmCollectionBtn.innerHTML = '<i class="fas fa-check-circle"></i> Подтвердить сборку';
+            }
+        })
+        .catch(error => {
+            showMessage('Ошибка: ' + error.message, 'error');
+            confirmCollectionBtn.disabled = false;
+            confirmCollectionBtn.innerHTML = '<i class="fas fa-check-circle"></i> Подтвердить сборку';
+        });
+    }
+
+    function exportCollectionPlan() {
+        if (!currentCollectionPlan) {
+            showMessage('Нет данных для экспорта', 'error');
+            return;
+        }
+
+        // Создаем данные для экспорта
+        const exportData = currentCollectionPlan.collection_plan.map(item => ({
+            'Штрих-код': item.barcode,
+            'Артикул': item.article,
+            'Название товара': item.product_name,
+            'Требуется': item.needed,
+            'Взять': item.take,
+            'Зона': item.zone,
+            'Коробка': item.box,
+            'Остаток после сборки': item.remaining_after
+        }));
+
+        // Создаем CSV содержимое
+        const headers = ['Штрих-код', 'Артикул', 'Название товара', 'Требуется', 'Взять', 'Зона', 'Коробка', 'Остаток после сборки'];
+        const csvContent = [
+            headers.join(','),
+            ...exportData.map(row => [
+                row['Штрих-код'],
+                row['Артикул'],
+                `"${row['Название товара']}"`,
+                row['Требуется'],
+                row['Взять'],
+                `"${row['Зона']}"`,
+                `"${row['Коробка']}"`,
+                row['Остаток после сборки']
+            ].join(','))
+        ].join('\n');
+
+        // Создаем и скачиваем файл
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        link.setAttribute('href', url);
+        link.setAttribute('download', `collection_plan_${new Date().toISOString().slice(0,10)}.csv`);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+
+    function showMessage(message, type) {
+        messageArea.innerHTML = `
+            <div class="alert alert-${type}">
+                ${message}
+            </div>
+        `;
+        
+        setTimeout(() => {
+            messageArea.innerHTML = '';
+        }, 5000);
+    }
+});
+</script>
+
+<style>
+.collection-container {
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.upload-card {
+    background: white;
+    padding: 2rem;
+    border-radius: 12px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    text-align: center;
+    margin-bottom: 2rem;
+}
+
+.file-upload-area {
+    border: 2px dashed #dee2e6;
+    border-radius: 8px;
+    padding: 3rem 2rem;
+    margin: 1.5rem 0;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.file-upload-area:hover {
+    border-color: #007bff;
+    background-color: #f8f9fa;
+}
+
+.file-name {
+    background: #e9ecef;
+    padding: 0.75rem 1rem;
+    border-radius: 6px;
+    margin: 1rem 0;
+    font-weight: 500;
+}
+
+.results-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.results-stats {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.stat-badge {
+    background: white;
+    padding: 1rem 1.5rem;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    text-align: center;
+}
+
+.stat-label {
+    display: block;
+    color: #666;
+    font-size: 0.9rem;
+    margin-bottom: 0.25rem;
+}
+
+.stat-value {
+    display: block;
+    font-size: 1.5rem;
+    font-weight: bold;
+    color: #667eea;
+}
+
+.optimized-plan, .detailed-plan {
+    background: white;
+    padding: 1.5rem;
+    border-radius: 12px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    margin-bottom: 2rem;
+}
+
+.location-card {
+    border: 1px solid #e9ecef;
+    border-radius: 8px;
+    margin-bottom: 1rem;
+    overflow: hidden;
+}
+
+.location-header {
+    background: #f8f9fa;
+    padding: 1rem 1.5rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #e9ecef;
+}
+
+.location-header h5 {
+    margin: 0;
+    color: #333;
+}
+
+.location-items {
+    padding: 1rem 1.5rem;
+}
+
+.location-item {
+    padding: 0.75rem 0;
+    border-bottom: 1px solid #f8f9fa;
+}
+
+.location-item:last-child {
+    border-bottom: none;
+}
+
+.location-item strong {
+    color: #333;
+    display: block;
+    margin-bottom: 0.25rem;
+}
+
+.item-details {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+    font-size: 0.9rem;
+    color: #666;
+}
+
+.item-details .remaining {
+    color: #28a745;
+    font-weight: 500;
+}
+
+.item-card {
+    background: #f8f9fa;
+    padding: 1rem;
+    border-radius: 8px;
+    margin-bottom: 1rem;
+    border: 1px solid #e9ecef;
+}
+
+.item-card h5 {
+    margin: 0 0 0.5rem 0;
+    color: #333;
+}
+
+.item-card p {
+    margin: 0.25rem 0;
+    color: #666;
+}
+
+.action-buttons {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-top: 2rem;
+}
+
+.alert {
+    padding: 0.75rem 1rem;
+    border-radius: 6px;
+    margin-bottom: 1rem;
+}
+
+.alert-success {
+    background: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+}
+
+.alert-error {
+    background: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+}
+
+.alert-info {
+    background: #d1ecf1;
+    color: #0c5460;
+    border: 1px solid #bee5eb;
+}
+
+.badge {
+    background: #667eea;
+    color: white;
+    padding: 0.25rem 0.75rem;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    font-weight: 500;
+}
+
+@media (max-width: 768px) {
+    .results-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    
+    .results-stats {
+        width: 100%;
+        justify-content: space-between;
+    }
+    
+    .stat-badge {
+        flex: 1;
+        min-width: 100px;
+    }
+    
+    .action-buttons {
+        flex-direction: column;
+    }
+    
+    .action-buttons .btn {
+        width: 100%;
+    }
+}
+</style>
+{% endblock %}

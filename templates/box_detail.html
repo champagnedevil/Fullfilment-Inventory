@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="page-header">
+    <button class="btn btn-back" id="backButton">
+        <i class="fas fa-arrow-left"></i> Назад
+    </button>
+    <div class="box-info">
+        <h2>{{ box.name }}</h2>
+        <p class="box-location">Зона: {{ box.zone_name }}</p>
+        {% if box.description %}
+        <p class="box-description">{{ box.description }}</p>
+        {% endif %}
+    </div>
+</div>
+
+<div class="items-section">
+    <div class="section-header">
+        <h3>Товары в коробке</h3>
+        <button class="btn btn-primary" id="addItemButton">
+            <i class="fas fa-plus"></i> Добавить товар
+        </button>
+        <button class="btn btn-info" id="startScannerButton">
+            <i class="fas fa-camera"></i> Сканировать штрих-код
+        </button>
+    </div>
+
+    <div class="items-list">
+        {% for item in items %}
+        <div class="item-card">
+            <div class="item-info">
+                <h4>{{ item.product_name }}</h4>
+                <p class="item-barcode">Штрих-код: {{ item.barcode or 'Не указан' }}</p>
+                <p class="item-quantity">Количество: {{ item.quantity }}</p>
+            </div>
+            <div class="item-actions">
+                <button class="btn-icon edit-item-button" data-item-id="{{ item.id }}" data-product-name="{{ item.product_name }}" data-quantity="{{ item.quantity }}" data-barcode="{{ item.barcode }}">
+                    <i class="fas fa-edit"></i>
+                </button>
+                <button class="btn-icon btn-danger delete-item-button" data-item-id="{{ item.id }}">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+        </div>
+        {% else %}
+        <p class="no-items">В коробке пока нет товаров</p>
+        {% endfor %}
+    </div>
+</div>
+
+<!-- Модальное окно добавления/редактирования товара -->
+<div id="itemModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3 id="itemModalTitle">Добавить товар</h3>
+            <span class="close" id="closeItemModal">&times;</span>
+        </div>
+        <div class="modal-body">
+            <form id="itemForm">
+                <input type="hidden" id="itemId">
+                <input type="hidden" id="boxId" value="{{ box.id }}">
+                <div class="form-group">
+                    <label for="productName">Название товара:</label>
+                    <input type="text" id="productName" required>
+                </div>
+                <div class="form-group">
+                    <label for="barcode">Штрих-код:</label>
+                    <div class="barcode-input-group">
+                        <input type="text" id="barcode">
+                        <button type="button" class="btn btn-sm" id="scannerForInputButton">
+                            <i class="fas fa-camera"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="quantity">Количество:</label>
+                    <input type="number" id="quantity" value="1" min="1" required>
+                </div>
+            </form>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" id="cancelItemButton">Отмена</button>
+            <button class="btn btn-primary" id="saveItemButton">Сохранить</button>
+        </div>
+    </div>
+</div>
+
+<!-- Сканер штрих-кодов -->
+<div id="scannerModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Сканирование штрих-кода</h3>
+            <span class="close" id="closeScannerModal">&times;</span>
+        </div>
+        <div class="modal-body">
+            <div id="scanner-container">
+                <div id="scanner-overlay">
+                    <div class="scanner-frame"></div>
+                </div>
+                <div id="scanner-ui">
+                    <button class="btn btn-secondary" id="switchCameraButton">
+                        <i class="fas fa-camera-rotate"></i> Сменить камеру
+                    </button>
+                    <button class="btn btn-primary" id="manualBarcodeButton">
+                        <i class="fas fa-keyboard"></i> Ввести вручную
+                    </button>
+                </div>
+                <div id="scanner-result" class="scanner-result"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно для ручного ввода штрих-кода -->
+<div id="manualInputModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Ввод штрих-кода</h3>
+            <span class="close" id="closeManualInputModal">&times;</span>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <label for="manualBarcodeInput">Введите штрих-код:</label>
+                <input type="text" id="manualBarcodeInput" placeholder="Введите штрих-код вручную">
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" id="cancelManualInputButton">Отмена</button>
+            <button class="btn btn-primary" id="useManualBarcodeButton">Использовать</button>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно для ввода количества после сканирования -->
+<div id="quantityModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Ввод количества</h3>
+            <span class="close" id="closeQuantityModal">&times;</span>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <label for="scannedProductName">Название товара:</label>
+                <input type="text" id="scannedProductName">
+            </div>
+            <div class="form-group">
+                <label for="scannedBarcode">Штрих-код:</label>
+                <input type="text" id="scannedBarcode" readonly>
+            </div>
+            <div class="form-group">
+                <label for="scannedQuantity">Количество:</label>
+                <input type="number" id="scannedQuantity" value="1" min="1" required>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" id="cancelQuantityButton">Отмена</button>
+            <button class="btn btn-primary" id="saveScannedItemButton">Добавить</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
